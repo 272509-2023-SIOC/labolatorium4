@@ -5,98 +5,95 @@
 
 
 import numpy as np
-from matplotlib import pyplot as plt
+import matplotlib.pyplot as plt
+from scipy.signal import convolve2d
 from PIL import Image
-from scipy.signal import convolve
 
-def f1(x):
-    return np.sin(x)
 
-def f2(x):
-    return np.sin(x - 1)
+# Definicja jądra Lanczosa
+def lanczos_kernel(a):
+    def kernel(x):
+        if x == 0:
+            return 1
+        elif -a < x < a:
+            x_pi = np.pi * x
+            return a * np.sin(x_pi) * np.sin(x_pi / a) / (x_pi ** 2)
+        else:
+            return 0
 
-def f3(x):
-    return np.sign(np.sin(8 * x))
+    return np.vectorize(kernel)
 
-def function(x, function_id):
-    if function_id == 1:
-        return f1(x)
-    elif function_id == 2:
-        return f2(x)
-    elif function_id == 3:
-        return f3(x)
-    else:
-        raise ValueError("Niepoprawny identyfikator funkcji")
+def generate_lanczos_kernel(a, size):
+    """Generuje dwuwymiarowe jądro Lanczosa."""
+    lanczos_1d = lanczos_kernel(a)
+    kernel_1d = np.array([lanczos_1d(i) for i in np.linspace(-a, a, size)])
+    kernel_2d = np.outer(kernel_1d, kernel_1d)
+    return kernel_2d / kernel_2d.sum()
 
-x = np.linspace(-np.pi, np.pi, 100)
 
-N = len(x)
+# Funkcja do zmniejszania obrazu
+def downscale_image(image, kernel):
+    return convolve2d(image, kernel, mode='same')
 
-kernels = [np.ones(3), np.array([1, 2, 1]), np.array([1, 0, -1]), np.array([-1, 0, 1]), np.array([-1, 2, -1])]
 
-point_counts = [N, 2 * N, 4 * N, 10 * N]
+# Funkcja do interpolacji obrazu
+def interpolate_image(image, multiplier, kernel):
+    new_size = (int(image.shape[0] * multiplier), int(image.shape[1] * multiplier))
+    interpolated_image = np.zeros(new_size)
 
-for function_id in [1, 2, 3]:
-    print(f"Function: {function.__name__}")
-    for kernel in kernels:
-        print(f"Kernel: {kernel}")
-        for point_count in point_counts:
-            x_interpolated = np.linspace(-np.pi, np.pi, point_count)
-            y_original = function(x_interpolated, function_id)
-            y_interpolated = convolve(y_original, kernel, mode='same')
-            kernel_sum = np.sum(kernel)
-            if kernel_sum != 0:
-                y_interpolated /= kernel_sum
-            mse = np.mean((y_original - y_interpolated) ** 2)
-            print(f"Function: {function_id}, Point count: {point_count}, MSE: {mse}")
+    kernel_size = kernel.shape[0]
+    pad_width = kernel_size // 2
 
-def reduce_image(image, scale_factor):
-    kernel = np.ones((scale_factor, scale_factor)) / (scale_factor ** 2)
-    return convolve(image, kernel, mode='same')
+    # Dodanie paddingu do obrazu
+    padded_image = np.pad(image, pad_width, mode='edge')
 
-def enlarge_image(image, scale_factor, interpolation_function):
-    new_height = image.shape[0] * scale_factor
-    new_width = image.shape[1] * scale_factor
+    for i in range(new_size[0]):
+        for j in range(new_size[1]):
+            # Wyliczenie odpowiednich indeksów w oryginalnym obrazie
+            x, y = int(i / multiplier), int(j / multiplier)
 
-    enlarged_image = np.zeros((new_height, new_width))
+            # Wybór odpowiedniej części obrazu i zastosowanie jądra
+            region = padded_image[x:x+kernel_size, y:y+kernel_size]
+            interpolated_value = np.sum(region * kernel)
 
-    for i in range(new_height):
-        for j in range(new_width):
-            x = i / scale_factor
-            y = j / scale_factor
-            if 0 <= x < image.shape[0] - 1 and 0 <= y < image.shape[1] - 1:
-                enlarged_image[i, j] = interpolation_function(image, x, y)
-    return enlarged_image
+            interpolated_image[i, j] = interpolated_value
 
-def nearest_neighbor_interpolation(image, x, y):
-    x_nearest = int(round(x))
-    y_nearest = int(round(y))
-    return image[x_nearest, y_nearest]
+    return interpolated_image
 
-image = Image.open("C:\\Users\\01szy\\OneDrive\\Obrazy\\mandril.bmp").convert("L")
-image = np.array(image)
-scale_factor = 2
 
-reduced_image = reduce_image(image, scale_factor)
+# Parametry i wczytanie obrazu
+image = np.array(Image.open('C:\\Users\\Szymon Nowicki\\Downloads\\grey monkey.jpg').convert('L'))
+kernel_avg = np.ones((3, 3)) / 9
+a = 3
+lanczos = lanczos_kernel(a)
 
-enlarged_image = enlarge_image(reduced_image, scale_factor, nearest_neighbor_interpolation)
+# Wygenerowanie jądra Lanczosa
+lanczos_kernel_array = generate_lanczos_kernel(a, 7)
 
-plt.subplot(131)
+# Zmniejszenie obrazu
+downscaled_image = downscale_image(image, kernel_avg)
+
+# Powiększanie obrazu
+multiplier = 2
+kernel_linear = np.ones((3, 3))
+interpolated_image_linear = interpolate_image(downscaled_image, multiplier, kernel_linear)
+
+# Powiększanie obrazu z użyciem jądra Lanczosa
+multiplier = 2
+interpolated_image_lanczos = interpolate_image(downscaled_image, multiplier, lanczos_kernel_array)
+
+# Wyświetlenie obrazów
+plt.figure(figsize=(24, 6))
+plt.subplot(1, 4, 1)
 plt.imshow(image, cmap='gray')
 plt.title('Original Image')
-
-plt.subplot(132)
-plt.imshow(reduced_image, cmap='gray')
-plt.title('Reduced Image')
-
-plt.subplot(133)
-plt.imshow(enlarged_image, cmap='gray')
-plt.title('Enlarged Image')
-
+plt.subplot(1, 4, 2)
+plt.imshow(downscaled_image, cmap='gray')
+plt.title('Downscaled Image')
+plt.subplot(1, 4, 3)
+plt.imshow(interpolated_image_lanczos, cmap='gray')
+plt.title('Lanczos Kernel Interpolation')
+plt.subplot(1, 4, 4)
+plt.imshow(interpolated_image_linear, cmap='gray')
+plt.title('Linear Kernel Interpolation')
 plt.show()
-
-mse = np.mean((image - enlarged_image) ** 2)
-print(f'Mean Squared Error (MSE) between original and enlarged image: {mse}')
-
-
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
