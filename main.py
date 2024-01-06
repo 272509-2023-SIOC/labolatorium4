@@ -30,6 +30,9 @@ def generate_lanczos_kernel(a, size):
     kernel_2d = np.outer(kernel_1d, kernel_1d)
     return kernel_2d / kernel_2d.sum()
 
+def calculate_mse(image1, image2):
+    """Oblicza średni błąd kwadratowy (MSE) między dwoma obrazami."""
+    return np.mean((image1 - image2) ** 2)
 
 # Funkcja do zmniejszania obrazu
 def downscale_image(image, kernel):
@@ -81,6 +84,10 @@ interpolated_image_linear = interpolate_image(downscaled_image, multiplier, kern
 # Powiększanie obrazu z użyciem jądra Lanczosa
 multiplier = 2
 interpolated_image_lanczos = interpolate_image(downscaled_image, multiplier, lanczos_kernel_array)
+
+# Obliczanie MSE
+mse_lanczos = calculate_mse(downscaled_image, interpolated_image_lanczos)
+mse_linear = calculate_mse(downscaled_image, interpolated_image_linear)
 
 # Wyświetlenie obrazów
 plt.figure(figsize=(24, 6))
